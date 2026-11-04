@@ -251,6 +251,8 @@ trInput.value = store.get("trInput", "");
 $("#tr-direction").value = store.get("trDirection", "en-la");
 $("#tr-style").value = store.get("trStyle", "lyrical");
 $("#tr-greek").checked = store.get("trGreek", false);
+$("#tr-key").value = store.get("accessKey", "");
+$("#tr-key").addEventListener("change", () => store.set("accessKey", $("#tr-key").value.trim()));
 
 $("#tr-go").addEventListener("click", async () => {
   const text = trInput.value.trim();
@@ -268,7 +270,7 @@ $("#tr-go").addEventListener("click", async () => {
   try {
     const res = await fetch("/api/translate", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...($("#tr-key").value.trim() ? { "x-access-key": $("#tr-key").value.trim() } : {}) },
       body: JSON.stringify({ text, direction, style: $("#tr-style").value, greek: $("#tr-greek").checked }),
     });
     const data = await res.json();

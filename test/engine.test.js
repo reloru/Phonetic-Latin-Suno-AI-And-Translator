@@ -4,12 +4,13 @@ import { readFileSync } from "node:fs";
 import { convert, analyzeWord, createLexicon, shardsFor, syllableDisplay } from "../public/js/engine.js";
 
 const lexDir = new URL("../public/lexicon/", import.meta.url);
+const splits = new Set(JSON.parse(readFileSync(new URL("manifest.json", lexDir), "utf8")).splits);
 function lexiconFor(text) {
   const shards = {};
-  for (const s of shardsFor(text)) {
+  for (const s of shardsFor(text, splits)) {
     try { shards[s] = JSON.parse(readFileSync(new URL(`${s}.json`, lexDir), "utf8")); } catch {}
   }
-  return createLexicon(shards);
+  return createLexicon(shards, splits);
 }
 const run = (text, opts = {}) => convert(text, { lexicon: lexiconFor(text), ...opts });
 

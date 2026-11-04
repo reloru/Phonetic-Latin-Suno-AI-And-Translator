@@ -48,6 +48,10 @@ Unified Billing, which charges Cloudflare credits and needs no Anthropic API key
 gateway has no credits, or Claude fails, it falls back to Workers AI
 `@cf/zai-org/glm-5.3`. The response says which model answered.
 
+Because Claude spends Cloudflare credits, the Claude path is locked to requests that send
+the Worker secret `CLAUDE_ACCESS_KEY` in an `x-access-key` header (entered once under
+Translate → Claude access, stored only in that browser). Everyone else gets Workers AI.
+
 ## API
 
 - `GET /api/convert?text=Hīc+ego+sum` returns all outputs plus per-word analysis as JSON.
@@ -85,9 +89,12 @@ npm run build:lexicon
 ```
 
 This streams the kaikki.org Wiktionary extract (about 1.25 GB, never stored) and rewrites
-`public/lexicon/*.json` and the IPA test fixture.
+`public/lexicon/*.json` and the IPA test fixture. Shards are keyed by a three-letter prefix,
+split further wherever a shard would exceed about 150 KB; `manifest.json` lists the split
+prefixes. `node scripts/reshard.mjs` re-shards existing files without downloading.
 
 ## Licenses
 
-Code: MIT (see `LICENSE`). Lexicon data in `public/lexicon/` and `data/`: CC BY-SA 4.0,
-derived from Wiktionary and the DCC Latin Core Vocabulary (see `public/lexicon/LICENSE.md`).
+Code: MIT (see `LICENSE`). Lexicon data in `public/lexicon/` and `data/`, and the test
+fixture `test/fixtures/wiktionary-classical-ipa.json`: CC BY-SA 4.0, derived from Wiktionary
+and the DCC Latin Core Vocabulary (see `public/lexicon/LICENSE.md`).

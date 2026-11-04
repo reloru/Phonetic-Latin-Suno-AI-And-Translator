@@ -17,7 +17,8 @@ import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { lexKey, shardOf, cleanForm } from "../public/js/lexkey.js";
+import { lexKey, cleanForm } from "../public/js/lexkey.js";
+import { writeShards } from "./shards.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const src = process.argv[2] ?? "https://kaikki.org/dictionary/Latin/kaikki.org-dictionary-Latin.jsonl";
@@ -91,25 +92,14 @@ for await (const line of rl) {
   }
 }
 
-const shards = new Map();
+const entries = [];
 for (const [key, forms] of lex) {
   const ordered = [...forms.entries()]
     .sort((a, b) => a[1].rank - b[1].rank || macronCount(a[0]) - macronCount(b[0]) || b[1].weight - a[1].weight || a[0].localeCompare(b[0]))
     .map(([f]) => f);
-  const s = shardOf(key);
-  if (!shards.has(s)) shards.set(s, {});
-  shards.get(s)[key] = ordered.join("|");
+  entries.push([key, ordered.join("|")]);
 }
-
-const outDir = join(root, "public", "lexicon");
-mkdirSync(outDir, { recursive: true });
-const manifest = {};
-for (const [s, obj] of [...shards.entries()].sort()) {
-  const sorted = Object.fromEntries(Object.entries(obj).sort(([a], [b]) => (a < b ? -1 : 1)));
-  writeFileSync(join(outDir, `${s}.json`), JSON.stringify(sorted));
-  manifest[s] = Object.keys(obj).length;
-}
-writeFileSync(join(outDir, "manifest.json"), JSON.stringify({ source: src, built: new Date().toISOString(), lines, keys: lex.size, shards: manifest }, null, 1));
+writeShards(join(root, "public", "lexicon"), entries, { source: src, lines });
 mkdirSync(join(root, "test", "fixtures"), { recursive: true });
 writeFileSync(join(root, "test", "fixtures", "wiktionary-classical-ipa.json"), JSON.stringify(ipaCorpus));
 process.stderr.write(`done: ${lines} lines, ${lex.size} keys, ${shards.size} shards, ${ipaCorpus.length} IPA pairs\n`);

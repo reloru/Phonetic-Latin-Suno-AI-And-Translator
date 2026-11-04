@@ -10,8 +10,9 @@ Worker (`latin-suno`) with static assets.
   Latin-phonology changes go here.
 - `public/js/lexkey.js`: spelling normalization shared by the engine and the lexicon builder.
 - `public/js/app.js`, `public/index.html`, `public/css/app.css`: the UI (no build step).
-- `public/lexicon/*.json`: generated vowel-length lexicon (CC BY-SA), sharded by the first two
-  letters of the normalized key. Do not hand-edit; regenerate with `npm run build:lexicon`.
+- `public/lexicon/*.json`: generated vowel-length lexicon (CC BY-SA), sharded by key prefix
+  (`shardOf` + `manifest.json` splits; every shard ≤ 150 KB so the Worker's byte-capped
+  cache stays small). Do not hand-edit; regenerate with `npm run build:lexicon`.
 - `src/worker.js`: `/api/lookup`, `/api/convert`, `/api/translate`, `/api/health`; everything
   else is served from `public/`.
 - `data/dcc-core-vocabulary.json`: lemma frequency ranks used to order ambiguous readings.
@@ -30,7 +31,8 @@ npx wrangler deploy --dry-run # bundling + config validation
 GitHub Actions (`.github/workflows/deploy.yml`) deploys on push to `main` and verifies that
 `https://latin-suno.reloru.workers.dev/api/health` reports the pushed commit.
 `CF_ACCOUNT_ID` and `COMMIT` are passed with `--var`; the secret `CLAUDE_GATEWAY_TOKEN` (API
-token scoped to AI Gateway Run) lives on the Worker, not in the repo.
+token scoped to AI Gateway Run) and `CLAUDE_ACCESS_KEY` (gates the Claude path) live on
+the Worker, not in the repo.
 
 ## Conventions
 

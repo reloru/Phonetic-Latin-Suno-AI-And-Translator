@@ -97,6 +97,15 @@
       </label>
     </div>
     <label class="check"><input type="checkbox" id="tr-greek"> Prefer Greek loanwords used in Classical Latin</label>
+    <details class="options">
+      <summary>Claude access</summary>
+      <div class="opt-grid">
+        <label>Access key (kept on this device only)
+          <input type="password" id="tr-key" autocomplete="off" autocapitalize="off" spellcheck="false" class="text-input">
+        </label>
+        <p class="hint">Without the key, translations come from the free Workers AI model.</p>
+      </div>
+    </details>
     <label class="field-label" for="tr-input">Text</label>
     <textarea id="tr-input" rows="6" placeholder="[Verse]&#10;I am here, and I am there too"></textarea>
     <button type="button" id="tr-go" class="primary">Translate</button>

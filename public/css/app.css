@@ -96,6 +96,7 @@ textarea:focus, select:focus, button:focus-visible { outline: 2px solid var(--ac
 .opt-grid label.check, label.check { display: flex; gap: 10px; align-items: center; font-size: 0.92rem; margin: 6px 0; }
 input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
 select { padding: 0 10px; font-weight: 500; width: 100%; }
+.text-input { font: 1rem var(--sans); min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); width: 100%; }
 fieldset { border: 0; padding: 0; margin: 0; }
 legend { font-size: 0.9rem; margin-bottom: 6px; padding: 0; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }

@@ -220,10 +220,10 @@ const hasMarks = (w) => /[̄̂̆̈͡]/.test(w.normalize("NFD"));
 /**
  * Lexicon wrapper. `shards` maps shard name -> { key: "form|form" }.
  */
-export function createLexicon(shards = {}) {
+export function createLexicon(shards = {}, splits = new Set()) {
   return {
     lookup(key) {
-      const sh = shards[shardOf(key)];
+      const sh = shards[shardOf(key, splits)];
       const v = sh ? sh[key] : undefined;
       return v ? v.split("|") : null;
     },
@@ -253,8 +253,8 @@ export function lookupKeys(text) {
 }
 
 /** Shard names needed to look up every word in `text` (including enclitic bases). */
-export function shardsFor(text) {
-  return [...new Set(lookupKeys(text).map(shardOf))];
+export function shardsFor(text, splits = new Set()) {
+  return [...new Set(lookupKeys(text).map((k) => shardOf(k, splits)))];
 }
 
 /**

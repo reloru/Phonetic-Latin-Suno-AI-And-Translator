@@ -37,7 +37,40 @@ export function lexKey(word) {
     .replace(/v/g, "u");
 }
 
-/** Shard name for a key: its first two letters (a single-letter key gets "_"). */
-export function shardOf(key) {
-  return (key[0] ?? "_") + (key[1] ?? "_");
+const SHARD_BASE = 3;
+const SHARD_MAX_BYTES = 150_000;
+const pad = (key, n) => (key + "_".repeat(n)).slice(0, n);
+
+/**
+ * Shard name for a key: its first three letters ("_"-padded), extended one letter at a
+ * time while that prefix is in `splits` (prefixes whose shard would exceed ~150 KB).
+ */
+export function shardOf(key, splits) {
+  let n = SHARD_BASE;
+  let p = pad(key, n);
+  while (splits && splits.has(p) && n < 12) p = pad(key, ++n);
+  return p;
+}
+
+/** Chooses which prefixes to split so that no shard exceeds SHARD_MAX_BYTES. */
+export function planShards(entries) {
+  const splits = new Set();
+  let groups = new Map([["", entries]]);
+  for (let n = SHARD_BASE; groups.size && n < 12; n++) {
+    const next = new Map();
+    for (const list of groups.values()) {
+      const byPrefix = new Map();
+      for (const e of list) {
+        const p = pad(e[0], n);
+        if (!byPrefix.has(p)) byPrefix.set(p, []);
+        byPrefix.get(p).push(e);
+      }
+      for (const [p, l] of byPrefix) {
+        const bytes = l.reduce((t, [k, v]) => t + k.length + v.length + 6, 0);
+        if (bytes > SHARD_MAX_BYTES && l.some(([k]) => k.length > n)) { splits.add(p); next.set(p, l); }
+      }
+    }
+    groups = next;
+  }
+  return splits;
 }

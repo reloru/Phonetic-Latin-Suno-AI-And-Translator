@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { convert, lexiconFromEntries, lookupKeys, syllableDisplay } from "../public/js/engine.js";
 import { shardOf } from "../public/js/lexkey.js";
+import manifest from "../public/lexicon/manifest.json";
 
 const WORKERS_AI_MODEL = "@cf/zai-org/glm-5.3";
 const DEFAULT_CLAUDE_MODEL = "claude-opus-5-5";
@@ -16,22 +17,31 @@ const json = (body, status = 200, headers = {}) =>
 
 // ------------------------------------------------------------------ lexicon
 
-// Parsed shards stay in isolate memory between requests; bounded so large texts
-// cannot grow it without limit.
-const shardCache = new Map();
-const SHARD_CACHE_MAX = 48;
+// Parsed shards stay in isolate memory between requests. The cache is bounded by raw
+// JSON bytes (parsed size is roughly 4x) to stay far below the 128 MB isolate limit, and
+// shards are loaded one at a time so a long text never holds many parsed shards at once.
+const SPLITS = new Set(manifest.splits);
+const shardCache = new Map(); // name -> { data, bytes }
+const SHARD_CACHE_MAX_BYTES = 6_000_000;
+let shardCacheBytes = 0;
 
 async function loadShard(env, origin, name) {
-  if (shardCache.has(name)) {
-    const v = shardCache.get(name);
+  const hit = shardCache.get(name);
+  if (hit) {
     shardCache.delete(name);
-    shardCache.set(name, v);
-    return v;
+    shardCache.set(name, hit);
+    return hit.data;
   }
   const res = await env.ASSETS.fetch(new Request(`${origin}/lexicon/${encodeURIComponent(name)}.json`));
-  const data = res.ok ? await res.json() : {};
-  shardCache.set(name, data);
-  while (shardCache.size > SHARD_CACHE_MAX) shardCache.delete(shardCache.keys().next().value);
+  const body = res.ok ? await res.text() : "{}";
+  const data = JSON.parse(body);
+  shardCache.set(name, { data, bytes: body.length });
+  shardCacheBytes += body.length;
+  while (shardCacheBytes > SHARD_CACHE_MAX_BYTES && shardCache.size > 1) {
+    const [oldest, v] = shardCache.entries().next().value;
+    shardCache.delete(oldest);
+    shardCacheBytes -= v.bytes;
+  }
   return data;
 }
 
@@ -39,17 +49,15 @@ async function lookup(env, origin, keys) {
   const byShard = new Map();
   for (const k of keys) {
     if (typeof k !== "string" || !/^[a-z]{1,40}$/.test(k)) continue;
-    const s = shardOf(k);
+    const s = shardOf(k, SPLITS);
     if (!byShard.has(s)) byShard.set(s, []);
     byShard.get(s).push(k);
   }
   const entries = {};
-  await Promise.all(
-    [...byShard.entries()].map(async ([s, ks]) => {
-      const shard = await loadShard(env, origin, s);
-      for (const k of ks) if (shard[k]) entries[k] = shard[k];
-    }),
-  );
+  for (const [s, ks] of byShard) {
+    const shard = await loadShard(env, origin, s);
+    for (const k of ks) if (Object.prototype.hasOwnProperty.call(shard, k)) entries[k] = shard[k];
+  }
   return entries;
 }
 
@@ -181,9 +189,25 @@ async function translateWorkersAI(env, req) {
   return { data, provider: "workers-ai", model: WORKERS_AI_MODEL };
 }
 
+// Claude spends Cloudflare credits, so when CLAUDE_ACCESS_KEY is set only requests that
+// carry it (header x-access-key) may use Claude; everyone else gets Workers AI.
+async function sha256(s) {
+  return crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+}
+async function claudeUnlocked(env, given) {
+  if (!env.CLAUDE_ACCESS_KEY) return true;
+  if (typeof given !== "string" || !given) return false;
+  return crypto.subtle.timingSafeEqual(await sha256(given), await sha256(env.CLAUDE_ACCESS_KEY));
+}
+
 async function translate(env, req) {
   const attempts = [];
-  const wantClaude = req.provider !== "workers-ai" && env.CLAUDE_GATEWAY_TOKEN && env.CF_ACCOUNT_ID;
+  const configured = env.CLAUDE_GATEWAY_TOKEN && env.CF_ACCOUNT_ID;
+  let wantClaude = req.provider !== "workers-ai" && configured;
+  if (wantClaude && !(await claudeUnlocked(env, req.accessKey))) {
+    attempts.push({ provider: "claude", error: "Claude needs the access key (Translate → Claude access)", code: "locked" });
+    wantClaude = false;
+  }
   if (wantClaude) {
     try {
       return { ...(await translateClaude(env, req)), attempts };
@@ -259,6 +283,7 @@ async function handleTranslate(request, env) {
     style: body.style === "literal" ? "literal" : "lyrical",
     greek: !!body.greek,
     provider: ["claude", "workers-ai"].includes(body.provider) ? body.provider : "auto",
+    accessKey: request.headers.get("x-access-key") || "",
   };
   try {
     const out = await translate(env, req);
@@ -280,6 +305,7 @@ export default {
           commit: env.COMMIT || "dev",
           translator: {
             claude: !!(env.CLAUDE_GATEWAY_TOKEN && env.CF_ACCOUNT_ID),
+            claudeNeedsKey: !!env.CLAUDE_ACCESS_KEY,
             claudeModel: env.CLAUDE_MODEL || DEFAULT_CLAUDE_MODEL,
             workersAiModel: WORKERS_AI_MODEL,
           },
