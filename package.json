@@ -1,0 +1,15 @@
+{
+  "name": "phonetic-latin-suno",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Classical Latin to Suno-friendly phonetic respelling, plus an English/Latin translator.",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "build:lexicon": "node scripts/build-lexicon.mjs",
+    "dev": "wrangler dev",
+    "check": "npm test && wrangler deploy --dry-run",
+    "deploy": "wrangler deploy"
+  },
+  "license": "MIT"
+}
