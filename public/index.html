@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Latin for Suno</title>
+<meta name="description" content="Classical Latin to Suno-friendly phonetic spellings, with an English–Latin translator.">
+<meta name="theme-color" content="#f6f3ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16140f" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%238a3b12'/%3E%3Ctext x='32' y='45' font-family='Georgia,serif' font-size='38' text-anchor='middle' fill='%23f6f3ec'%3E%C4%81%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<header class="top">
+  <h1>Latin <span>for Suno</span></h1>
+  <p class="sub">Classical pronunciation of the 1st century BC, spelled so Suno sings it.</p>
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tab-pronounce" aria-controls="panel-pronounce" aria-selected="true">Pronounce</button>
+    <button role="tab" id="tab-translate" aria-controls="panel-translate" aria-selected="false">Translate</button>
+    <button role="tab" id="tab-guide" aria-controls="panel-guide" aria-selected="false">Guide</button>
+  </nav>
+</header>
+
+<main>
+  <section id="panel-pronounce" role="tabpanel" aria-labelledby="tab-pronounce">
+    <label class="field-label" for="latin">Latin text</label>
+    <textarea id="latin" rows="5" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Hīc ego sum&#10;Iterum atque nōn iterum"></textarea>
+    <div class="keys" aria-label="Macron keys">
+      <button type="button" data-key="ā">ā</button><button type="button" data-key="ē">ē</button><button type="button" data-key="ī">ī</button><button type="button" data-key="ō">ō</button><button type="button" data-key="ū">ū</button><button type="button" data-key="ȳ">ȳ</button>
+      <button type="button" id="toggle-macron" class="wide" title="Add or remove a macron on the vowel before the cursor">¯ last vowel</button>
+    </div>
+    <p id="mode-note" class="mode-note" hidden></p>
+
+    <details class="options">
+      <summary>Options</summary>
+      <div class="opt-grid">
+        <label class="check"><input type="checkbox" id="opt-elision"> Elide vowels between words (sung verse)</label>
+        <label>Short <i>u</i> in Suno Latin
+          <select id="opt-shortU"><option value="ū">ū (sūm)</option><option value="u">u (sum)</option><option value="oo">oo (soom)</option></select>
+        </label>
+        <fieldset>
+          <legend>Keep these long vowels as macrons in the respellings</legend>
+          <div class="chips">
+            <label><input type="checkbox" class="opt-mac" value="ā"> ā</label>
+            <label><input type="checkbox" class="opt-mac" value="ē"> ē</label>
+            <label><input type="checkbox" class="opt-mac" value="ī"> ī</label>
+            <label><input type="checkbox" class="opt-mac" value="ō" checked> ō</label>
+            <label><input type="checkbox" class="opt-mac" value="ū"> ū</label>
+          </div>
+        </fieldset>
+        <label class="check"><input type="checkbox" id="opt-caps" checked> Capitals on the stressed syllable (stressed respelling)</label>
+        <label>Final <i>-m</i> in IPA
+          <select id="opt-finalM"><option value="nasal">nasal vowel (Allen)</option><option value="keep">written m</option></select>
+        </label>
+      </div>
+    </details>
+
+    <p id="dict-status" class="status" aria-live="polite"></p>
+
+    <div class="outputs">
+      <article class="out" data-out="hybrid">
+        <header><h2>Suno Latin</h2><button type="button" class="copy">Copy</button></header>
+        <p class="hint">Latin spelling with macrons kept and the letters Suno misreads fixed.</p>
+        <pre class="text" lang="la"></pre>
+      </article>
+      <article class="out" data-out="lyric">
+        <header><h2>Lyric respelling</h2><button type="button" class="copy">Copy</button></header>
+        <p class="hint">English-style spelling, written as whole words.</p>
+        <pre class="text"></pre>
+      </article>
+      <article class="out" data-out="respell">
+        <header><h2>Stressed respelling</h2><button type="button" class="copy">Copy</button></header>
+        <p class="hint">Syllables split with hyphens; capitals mark the stress.</p>
+        <pre class="text"></pre>
+      </article>
+      <article class="out" data-out="ipa">
+        <header><h2>IPA</h2><button type="button" class="copy">Copy</button></header>
+        <p class="hint">Reference transcription, for checking what the others aim at.</p>
+        <pre class="text ipa"></pre>
+      </article>
+    </div>
+
+    <section class="words" aria-labelledby="words-h">
+      <h2 id="words-h">Words</h2>
+      <p class="hint">Tap another reading to put it in your text.</p>
+      <ul id="word-list"></ul>
+    </section>
+  </section>
+
+  <section id="panel-translate" role="tabpanel" aria-labelledby="tab-translate" hidden>
+    <div class="row">
+      <label>Direction
+        <select id="tr-direction"><option value="en-la">English → Latin</option><option value="la-en">Latin → English</option></select>
+      </label>
+      <label>Style
+        <select id="tr-style"><option value="lyrical">Singable</option><option value="literal">Literal</option></select>
+      </label>
+    </div>
+    <label class="check"><input type="checkbox" id="tr-greek"> Prefer Greek loanwords used in Classical Latin</label>
+    <label class="field-label" for="tr-input">Text</label>
+    <textarea id="tr-input" rows="6" placeholder="[Verse]&#10;I am here, and I am there too"></textarea>
+    <button type="button" id="tr-go" class="primary">Translate</button>
+    <p id="tr-status" class="status" aria-live="polite"></p>
+    <article id="tr-result" class="out" hidden>
+      <header><h2 id="tr-result-h">Latin</h2><button type="button" class="copy" id="tr-copy">Copy</button></header>
+      <pre id="tr-output" class="text"></pre>
+      <p id="tr-notes" class="hint"></p>
+      <p id="tr-extra" class="hint"></p>
+      <button type="button" id="tr-send" class="primary">Pronounce this Latin</button>
+    </article>
+  </section>
+
+  <section id="panel-guide" role="tabpanel" aria-labelledby="tab-guide" hidden class="guide">
+    <h2>What the outputs are</h2>
+    <dl>
+      <dt>Suno Latin</dt>
+      <dd>Your Latin, with long vowels kept as macrons, short <i>u</i> written <i>ū</i> (so <i>sum</i> is not sung “suhm”), <i>c</i> before <i>e</i>/<i>i</i> written <i>k</i>, <i>v</i> written <i>w</i>, consonantal <i>i</i> written <i>y</i>, and <i>ae</i>/<i>oe</i> written <i>ai</i>/<i>oi</i>. Example: <i>Hīc ego sum</i> → <i>Hīck ehgo sūm</i>.</dd>
+      <dt>Lyric respelling</dt>
+      <dd>English-style spelling as whole words: <i>Heek ehgo soom</i>. Use it when Suno keeps reading Latin as English or as Church Latin.</dd>
+      <dt>Stressed respelling</dt>
+      <dd>Hyphenated syllables with the stressed one in capitals: <i>AHT-kweh</i>. Capitals sometimes make Suno stumble; turn them off in Options.</dd>
+      <dt>IPA</dt>
+      <dd>The reconstructed pronunciation itself, for checking. It follows W. S. Allen, <i>Vox Latina</i> (2nd ed., 1978), and Wiktionary's Classical Latin transcriptions.</dd>
+    </dl>
+    <h2>Vowel length</h2>
+    <p>Stress and vowel quality depend on vowel length. Type macrons yourself (on iPhone, hold a vowel key), or leave them out and the dictionary fills them in. When one spelling has two readings (<i>liber</i> “book” / <i>līber</i> “free”), the more common word is chosen and the other is offered under Words. Macrons you type are always kept.</p>
+    <h2>Lyric sheets</h2>
+    <p>Lines such as <i>[Verse]</i> or <i>[Chorus]</i>, and any [bracketed] text, pass through unchanged. Line breaks are kept.</p>
+    <h2>Translator</h2>
+    <p>Translations aim at Classical Latin of the 1st century BC and come back with macrons. Those macrons are checked against the dictionary before pronunciation, because translation models often misplace them.</p>
+    <h2>Use it from Shortcuts</h2>
+    <p><code>GET /api/convert?text=Hīc+ego+sum&amp;format=text&amp;output=lyric</code> returns one output as plain text; leave out <code>format</code> for JSON with all four.</p>
+    <h2>Sources</h2>
+    <p>Vowel lengths come from English Wiktionary (via kaikki.org), ordered by the Dickinson College Commentaries Latin Core Vocabulary; both are CC BY-SA. The Suno-specific spellings are heuristics built from how Suno has actually sung test lines, not from any Suno documentation.</p>
+  </section>
+</main>
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { convert, analyzeWord, createLexicon, shardsFor, syllableDisplay } from "../src/engine.js";
+import { convert, analyzeWord, createLexicon, shardsFor, syllableDisplay } from "../public/js/engine.js";
 
 const lexDir = new URL("../public/lexicon/", import.meta.url);
 function lexiconFor(text) {
@@ -59,6 +59,14 @@ test("verify mode rejects macrons the dictionary does not have", () => {
   assert.equal(w.form, "lupus");
   const ok = run("hīc", { mode: "verify" }).words[0];
   assert.equal(ok.form, "hīc");
+});
+
+test("a breve pins a short reading against the dictionary default", () => {
+  const w = run("lĭber").words[0];
+  assert.equal(w.form, "liber");
+  assert.equal(w.source, "input");
+  assert.ok(!w.notes.some((n) => n.type === "input-differs"));
+  assert.equal(run("lĭber").hybrid, "lĭber".normalize("NFD").replace(/\u0306/g, "").normalize("NFC"));
 });
 
 test("circumflex input is read as a macron", () => {
@@ -136,7 +144,9 @@ test("elision for sung verse", () => {
 
 test("options: shortU and longO", () => {
   assert.equal(convert("sum", { shortU: "u" }).hybrid, "sum");
-  assert.equal(convert("nōn", { longO: "oh" }).lyric, "nohn");
+  assert.equal(convert("nōn", { lyricMacrons: "" }).lyric, "nohn");
+  assert.equal(convert("Hīc sum", { lyricMacrons: "īōū" }).lyric, "Hīk soom");
+  assert.equal(convert("atque", { stressCaps: false }).respell, "aht-kweh");
 });
 
 // Wiktionary's Classical-Latin IPA (built by its la-IPA module) is an independent check.

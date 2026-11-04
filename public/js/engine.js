@@ -222,8 +222,6 @@ const hasMarks = (w) => /[̄̂̆̈͡]/.test(w.normalize("NFD"));
  */
 export function createLexicon(shards = {}) {
   return {
-    shards,
-    has: (s) => Object.prototype.hasOwnProperty.call(shards, s),
     lookup(key) {
       const sh = shards[shardOf(key)];
       const v = sh ? sh[key] : undefined;
@@ -232,19 +230,32 @@ export function createLexicon(shards = {}) {
   };
 }
 
-/** Shard names needed to look up every word in `text` (including enclitic bases). */
-export function shardsFor(text) {
-  const need = new Set();
-  for (const m of text.matchAll(WORD_RE)) {
-    const k = lexKey(m[0]);
-    need.add(shardOf(k));
-    const enc = k.match(/^(.{2,}?)(que|ne|ue)$/);
-    if (enc) need.add(shardOf(enc[1]));
-  }
-  return [...need];
+/** Lexicon over a flat { key: "form|form" } map (what /api/lookup returns). */
+export function lexiconFromEntries(entries = {}) {
+  return {
+    lookup(key) {
+      const v = Object.prototype.hasOwnProperty.call(entries, key) ? entries[key] : undefined;
+      return v ? v.split("|") : null;
+    },
+  };
 }
 
-const ENCLITIC_RE = /^(.{2,}?)(que|ne|ve|ue)$/;
+/** Every lookup key `text` needs: each word, plus the base of a possible enclitic. */
+export function lookupKeys(text) {
+  const keys = new Set();
+  for (const m of String(text).matchAll(WORD_RE)) {
+    const k = lexKey(m[0]);
+    keys.add(k);
+    const enc = k.match(/^(.{2,}?)(que|ne|ue)$/);
+    if (enc) keys.add(enc[1]);
+  }
+  return [...keys];
+}
+
+/** Shard names needed to look up every word in `text` (including enclitic bases). */
+export function shardsFor(text) {
+  return [...new Set(lookupKeys(text).map(shardOf))];
+}
 
 /**
  * Resolves vowel lengths for one word.
@@ -306,6 +317,14 @@ export function analyzeWord(word, { lexicon = null, mode = "auto" } = {}) {
   const stress = syl.length ? stressIndex(syl, formNFC, r.enclitic) : -1;
   syl.forEach((s, i) => (s.stressed = i === stress));
   const notes = [...r.notes];
+  for (const n of notes) {
+    if (n.type !== "ambiguous") continue;
+    // Alternatives that only differ in a final vowel do not move the accent.
+    n.affectsStress = n.alternatives.some((alt) => {
+      const s2 = syllabify(segment(letters(alt), alt), lexKey(alt));
+      return s2.length !== syl.length || (s2.length && stressIndex(s2, alt.normalize("NFC"), r.enclitic) !== stress);
+    });
+  }
   if (FINAL_STRESS.has(formNFC)) notes.push({ type: "final-stress" });
   if (r.source === "unknown" && syl.length >= 3 && !syl[syl.length - 2].heavy) notes.push({ type: "stress-uncertain" });
   const cap = /^\p{Lu}/u.test(word);
@@ -421,7 +440,7 @@ function hybridWord(a, opts) {
   return a.cap ? out[0].toUpperCase() + out.slice(1) : out;
 }
 
-const LONG_RESPELL = { a: "ah", e: "ay", i: "ee", u: "oo", y: "ü" };
+const LONG_RESPELL = { a: "ah", e: "ay", i: "ee", o: "oh", u: "oo", y: "ü" };
 
 function respellCons(u, style, ctx) {
   switch (u.c) {
@@ -456,7 +475,7 @@ function respellNucleus(s, i, syl, style, opts) {
     }
   }
   if (codaJ) return { a: "ai", e: "ey", i: "ee", o: "oy", u: "ooy", y: "üy" }[v.v];
-  if (v.long) return v.v === "o" ? (opts.longO ?? "ō") : LONG_RESPELL[v.v];
+  if (v.long) return (opts.lyricMacrons ?? "ō").includes(MACRON_OF[v.v]) ? MACRON_OF[v.v] : LONG_RESPELL[v.v];
   const open = s.coda.length === 0;
   const last = i === syl.length - 1;
   const beforeVowel = !last && syl[i + 1].onset.length === 0 && open;
@@ -498,7 +517,7 @@ function respellWord(a, style, opts) {
     return { text: onset + nuc + coda, stressed: s.stressed, onsetless: s.onset.length === 0 };
   });
   if (style === "respell") {
-    const caps = parts.length > 1;
+    const caps = parts.length > 1 && opts.stressCaps !== false;
     return parts.filter((p) => p.text).map((p) => (caps && p.stressed ? p.text.toUpperCase() : p.text)).join("-");
   }
   let out = "";
@@ -549,8 +568,11 @@ function renderToken(t, style, opts) {
 /**
  * Converts text. Section-tag lines ([Verse], [Chorus]) and any [bracketed] span pass
  * through unchanged.
- * opts: { lexicon, mode: "auto"|"verify", elision: bool, shortU: "ū"|"u"|"oo",
- *         longO: "ō"|"oh", ipaFinalM: "nasal"|"keep" }
+ * opts: { lexicon, mode: "auto"|"verify", elision: bool,
+ *         shortU: "ū"|"u"|"oo"   short u in the hybrid (ū avoids Suno's "suhm"),
+ *         lyricMacrons: "ō"      long vowels kept as macron letters in respell/lyric,
+ *         stressCaps: bool       capitalize the stressed syllable in respell,
+ *         ipaFinalM: "nasal"|"keep" }
  * Returns { ipa, hybrid, respell, lyric, words }.
  */
 export function convert(text, opts = {}) {

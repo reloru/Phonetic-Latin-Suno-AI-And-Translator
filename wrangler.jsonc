@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "latin-suno",
+  "main": "src/worker.js",
+  // A date after 2026-08-04 enables nodejs_compat by default (needed by @anthropic-ai/sdk).
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "ai": { "binding": "AI" },
+  "ratelimits": [
+    { "name": "TRANSLATE_LIMIT", "namespace_id": "4101", "simple": { "limit": 20, "period": 60 } },
+    { "name": "LOOKUP_LIMIT", "namespace_id": "4102", "simple": { "limit": 300, "period": 60 } }
+  ],
+  // CF_ACCOUNT_ID and COMMIT are passed with --var at deploy time (see .github/workflows/deploy.yml).
+  // CLAUDE_GATEWAY_TOKEN is a secret: an API token limited to "AI Gateway Run".
+  "vars": {
+    "AI_GATEWAY_ID": "default",
+    "CLAUDE_MODEL": "claude-opus-5-5"
+  },
+  "observability": { "enabled": true }
+}

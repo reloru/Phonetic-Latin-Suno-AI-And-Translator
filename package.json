@@ -11,5 +11,11 @@
     "check": "npm test && wrangler deploy --dry-run",
     "deploy": "wrangler deploy"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^4.157.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.1.0"
+  }
 }

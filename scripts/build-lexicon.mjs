@@ -17,7 +17,7 @@ import { createInterface } from "node:readline";
 import { Readable } from "node:stream";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { lexKey, shardOf, cleanForm } from "../src/lexkey.js";
+import { lexKey, shardOf, cleanForm } from "../public/js/lexkey.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const src = process.argv[2] ?? "https://kaikki.org/dictionary/Latin/kaikki.org-dictionary-Latin.jsonl";
