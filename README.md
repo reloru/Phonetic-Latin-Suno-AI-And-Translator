@@ -48,9 +48,19 @@ Unified Billing, which charges Cloudflare credits and needs no Anthropic API key
 gateway has no credits, or Claude fails, it falls back to Workers AI
 `@cf/zai-org/glm-5.3`. The response says which model answered.
 
-Because Claude spends Cloudflare credits, the Claude path is locked to requests that send
-the Worker secret `CLAUDE_ACCESS_KEY` in an `x-access-key` header (entered once under
+Translation providers are tried in this order:
+
+1. **VM bridge** (`bridge/`) — Relo's own machine runs the unmodified `claude` CLI on his
+   Claude subscription, reached over Cloudflare Tunnel. Best Latin, about 7-15 seconds.
+2. **Claude via AI Gateway** — spends Cloudflare Unified Billing credits.
+3. **Workers AI `@cf/zai-org/glm-5.3`** — free, and noticeably weaker at Latin.
+
+The first two spend Relo's own resources, so both are locked to requests carrying the
+Worker secret `CLAUDE_ACCESS_KEY` in an `x-access-key` header (entered once under
 Translate → Claude access, stored only in that browser). Everyone else gets Workers AI.
+Anthropic's policy permits an end user to run the unmodified binary on their own plan but
+not to route other people's requests through it, so that gate is load-bearing — see
+`bridge/README.md`.
 
 ## API
 
@@ -61,6 +71,14 @@ Translate → Claude access, stored only in that browser). Everyone else gets Wo
 - `POST /api/translate` with `{"text", "direction": "en-la"|"la-en", "style": "lyrical"|"literal", "greek": bool}`.
 - `POST /api/lookup` with `{"keys": [...]}` returns dictionary entries.
 - `GET /api/health` returns the deployed commit and translator configuration.
+
+## The VM bridge
+
+`bridge/server.js` runs as the `claude-bridge` systemd service on the VM and exposes one
+operation: translate. The spawned CLI has **every tool denied**, no MCP servers, no hooks,
+an empty working directory and a 90-second timeout, because its input is text from the
+internet. `bridge/README.md` has the install steps and the canary test to run after any
+Claude Code upgrade.
 
 ## Run locally
 
