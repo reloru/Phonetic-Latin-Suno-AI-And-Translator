@@ -19,7 +19,9 @@
   // CLAUDE_GATEWAY_TOKEN is a secret: an API token limited to "AI Gateway Run".
   "vars": {
     "AI_GATEWAY_ID": "default",
-    "CLAUDE_MODEL": "claude-opus-5-5"
+    "CLAUDE_MODEL": "claude-opus-5-5",
+    // The VM bridge (bridge/README.md). Its shared secret is the BRIDGE_SECRET secret.
+    "BRIDGE_URL": "https://latin-bridge.crosbynews.com"
   },
   "observability": { "enabled": true }
 }

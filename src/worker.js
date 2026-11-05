@@ -1,7 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { convert, lexiconFromEntries, lookupKeys, syllableDisplay } from "../public/js/engine.js";
 import { shardOf } from "../public/js/lexkey.js";
-import manifest from "../public/lexicon/manifest.json";
+import { systemPrompt, schemaFor, wrapInput, parseJsonLoose, cleanTranslation } from "../shared/prompts.js";
+import manifest from "../public/lexicon/manifest.json" with { type: "json" };
 
 const WORKERS_AI_MODEL = "@cf/zai-org/glm-5.3";
 const DEFAULT_CLAUDE_MODEL = "claude-opus-5-5";
@@ -63,64 +64,6 @@ async function lookup(env, origin, keys) {
 
 // ------------------------------------------------------------------ translation
 
-const LATIN_SCHEMA = {
-  type: "object",
-  properties: {
-    latin: { type: "string" },
-    notes: { type: "string" },
-    greek_loans: { type: "array", items: { type: "string" } },
-    neologisms: { type: "array", items: { type: "string" } },
-  },
-  required: ["latin", "notes", "greek_loans", "neologisms"],
-  additionalProperties: false,
-};
-const ENGLISH_SCHEMA = {
-  type: "object",
-  properties: { english: { type: "string" }, notes: { type: "string" } },
-  required: ["english", "notes"],
-  additionalProperties: false,
-};
-
-function systemPrompt({ direction, style, greek }) {
-  if (direction === "la-en") {
-    return [
-      "You translate Latin into natural, accurate English.",
-      "Keep the line breaks of the input one-to-one, and copy any [bracketed] section tags unchanged.",
-      'In "notes", briefly mention real ambiguities (a word with two readings, an unclear construction) and nothing else; use an empty string if there are none.',
-      "Reply with a JSON object only.",
-    ].join("\n");
-  }
-  return [
-    "You translate English into Latin for song lyrics. An AI singer will perform the Latin with reconstructed Classical pronunciation, so spelling and vowel length matter.",
-    "",
-    "Language: Classical Latin of the 1st century BC (Cicero, Caesar, Catullus, Lucretius; Vergil and Horace are acceptable). Prefer vocabulary and idiom attested in that period. When a concept has no Classical word, use the most established Neo-Latin term and list it in \"neologisms\".",
-    style === "literal"
-      ? "Style: stay close to the English meaning and structure."
-      : "Style: natural, singable Latin. Free word order and poetic idiom are welcome; keep each line roughly as long as the English line.",
-    greek
-      ? 'Where a Greek loanword was established in Classical Latin (philosophia, poēta, aethēr, cithara, chorus), prefer it when it fits. List every Greek loanword you used in "greek_loans".'
-      : 'Prefer native Latin words. List any Greek loanword you still used in "greek_loans".',
-    "",
-    "Spelling:",
-    "- Mark every long vowel with a macron (ā ē ī ō ū ȳ), including hidden quantities before two consonants (āctus, mīlle, cōnsul). Leave short vowels unmarked. Never use breves, acute accents or circumflexes.",
-    "- Write consonantal u as v (vīta) and consonantal i as i, never j (iam, cuius). Write ae and oe, not æ or œ.",
-    "",
-    "Layout: keep the line breaks of the input one-to-one. Copy any [bracketed] section tags such as [Verse] or [Chorus] unchanged. Text in (parentheses) is sung backing vocals: translate it and keep the parentheses.",
-    "",
-    'In "notes", give at most three short sentences on choices a singer should know about (an idiom you chose, a word with no Classical equivalent). Use an empty string if there is nothing worth saying.',
-    "Reply with a JSON object only.",
-  ].join("\n");
-}
-
-function parseJsonLoose(text) {
-  if (typeof text !== "string") return null;
-  const t = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
-  try { return JSON.parse(t); } catch {}
-  const m = t.match(/\{[\s\S]*\}/);
-  if (m) { try { return JSON.parse(m[0]); } catch {} }
-  return null;
-}
-
 class ProviderError extends Error {
   constructor(message, { status, code } = {}) {
     super(message);
@@ -146,9 +89,9 @@ async function translateClaude(env, req) {
       max_tokens: 16000,
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
-      output_config: { effort: "medium", format: { type: "json_schema", schema: req.direction === "la-en" ? ENGLISH_SCHEMA : LATIN_SCHEMA } },
+      output_config: { effort: "medium", format: { type: "json_schema", schema: schemaFor(req.direction) } },
       system: systemPrompt(req),
-      messages: [{ role: "user", content: req.text }],
+      messages: [{ role: "user", content: wrapInput(req.text) }],
     });
     if (response.stop_reason === "refusal") throw new ProviderError("Claude declined this request", { code: "refusal" });
     if (response.stop_reason === "max_tokens") throw new ProviderError("Claude ran out of output tokens", { code: "max_tokens" });
@@ -169,6 +112,38 @@ async function translateClaude(env, req) {
   }
 }
 
+// The VM bridge: Relo's own machine runs the unmodified claude CLI on his subscription.
+// It is reachable only over Cloudflare Tunnel and only with BRIDGE_SECRET, and it accepts
+// nothing but these four fields, so it cannot be used as a general Claude proxy.
+async function translateBridge(env, req) {
+  const started = Date.now();
+  try {
+    const res = await fetch(`${env.BRIDGE_URL.replace(/\/$/, "")}/translate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${env.BRIDGE_SECRET}` },
+      body: JSON.stringify({ text: req.text, direction: req.direction, style: req.style, greek: req.greek }),
+      signal: AbortSignal.timeout(95_000),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const busy = res.status === 503;
+      throw new ProviderError(data?.error || `the VM bridge returned ${res.status}`, {
+        status: res.status,
+        code: busy ? "busy" : res.status === 401 ? "bridge_auth" : "bridge_error",
+      });
+    }
+    if (!data) throw new ProviderError("the VM bridge returned no JSON", { code: "bad_json" });
+    return { data, provider: "vm-bridge", model: data.model || "claude (VM)" };
+  } catch (e) {
+    if (e instanceof ProviderError) throw e;
+    const timeout = e.name === "TimeoutError" || e.name === "AbortError";
+    throw new ProviderError(
+      timeout ? `the VM bridge did not answer within ${Math.round((Date.now() - started) / 1000)}s` : `the VM bridge is unreachable: ${e.message}`,
+      { code: timeout ? "timeout" : "offline" },
+    );
+  }
+}
+
 async function translateWorkersAI(env, req) {
   const schemaHint =
     req.direction === "la-en"
@@ -177,7 +152,7 @@ async function translateWorkersAI(env, req) {
   const out = await env.AI.run(WORKERS_AI_MODEL, {
     messages: [
       { role: "system", content: `${systemPrompt(req)}\n${schemaHint}` },
-      { role: "user", content: req.text },
+      { role: "user", content: wrapInput(req.text) },
     ],
     max_tokens: 6000,
     reasoning_effort: "low",
@@ -192,38 +167,51 @@ async function translateWorkersAI(env, req) {
 // Claude spends Cloudflare credits, so when CLAUDE_ACCESS_KEY is set only requests that
 // carry it (header x-access-key) may use Claude; everyone else gets Workers AI.
 async function sha256(s) {
-  return crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
 }
+
+/** Constant-time compare of two secrets, via their digests so lengths never differ. */
+async function secretMatches(given, expected) {
+  const [a, b] = await Promise.all([sha256(given), sha256(expected)]);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
 async function claudeUnlocked(env, given) {
   if (!env.CLAUDE_ACCESS_KEY) return true;
   if (typeof given !== "string" || !given) return false;
-  return crypto.subtle.timingSafeEqual(await sha256(given), await sha256(env.CLAUDE_ACCESS_KEY));
+  return secretMatches(given, env.CLAUDE_ACCESS_KEY);
 }
 
 async function translate(env, req) {
   const attempts = [];
-  const configured = env.CLAUDE_GATEWAY_TOKEN && env.CF_ACCOUNT_ID;
-  let wantClaude = req.provider !== "workers-ai" && configured;
-  if (wantClaude && !(await claudeUnlocked(env, req.accessKey))) {
-    attempts.push({ provider: "claude", error: "Claude needs the access key (Translate → Claude access)", code: "locked" });
-    wantClaude = false;
-  }
-  if (wantClaude) {
+  const unlocked = await claudeUnlocked(env, req.accessKey);
+  const have = {
+    "vm-bridge": !!(env.BRIDGE_URL && env.BRIDGE_SECRET),
+    claude: !!(env.CLAUDE_GATEWAY_TOKEN && env.CF_ACCOUNT_ID),
+  };
+  const runners = { "vm-bridge": translateBridge, claude: translateClaude };
+
+  // Both Claude paths spend Relo's own resources, so both sit behind the access key.
+  const wanted = req.provider === "auto" ? ["vm-bridge", "claude"] : req.provider === "workers-ai" ? [] : [req.provider];
+  for (const name of wanted) {
+    if (!have[name]) {
+      if (req.provider !== "auto") attempts.push({ provider: name, error: `${name} is not configured`, code: "unconfigured" });
+      continue;
+    }
+    if (!unlocked) {
+      attempts.push({ provider: name, error: "this path needs the access key (Translate → Claude access)", code: "locked" });
+      continue;
+    }
     try {
-      return { ...(await translateClaude(env, req)), attempts };
+      return { ...(await runners[name](env, req)), attempts };
     } catch (e) {
-      attempts.push({ provider: "claude", error: e.message, code: e.code });
-      if (req.provider === "claude") throw Object.assign(e, { attempts });
+      attempts.push({ provider: name, error: e.message, code: e.code });
+      if (req.provider === name) throw Object.assign(e, { attempts });
     }
   }
   return { ...(await translateWorkersAI(env, req)), attempts };
-}
-
-function cleanTranslation(data, direction) {
-  const str = (v) => (typeof v === "string" ? v : "");
-  const arr = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === "string").slice(0, 50) : []);
-  if (direction === "la-en") return { english: str(data.english), notes: str(data.notes) };
-  return { latin: str(data.latin), notes: str(data.notes), greek_loans: arr(data.greek_loans), neologisms: arr(data.neologisms) };
 }
 
 // ------------------------------------------------------------------ handlers
@@ -282,7 +270,7 @@ async function handleTranslate(request, env) {
     direction: body.direction === "la-en" ? "la-en" : "en-la",
     style: body.style === "literal" ? "literal" : "lyrical",
     greek: !!body.greek,
-    provider: ["claude", "workers-ai"].includes(body.provider) ? body.provider : "auto",
+    provider: ["claude", "workers-ai", "vm-bridge"].includes(body.provider) ? body.provider : "auto",
     accessKey: request.headers.get("x-access-key") || "",
   };
   try {
@@ -305,6 +293,7 @@ export default {
           commit: env.COMMIT || "dev",
           translator: {
             claude: !!(env.CLAUDE_GATEWAY_TOKEN && env.CF_ACCOUNT_ID),
+            vmBridge: !!(env.BRIDGE_URL && env.BRIDGE_SECRET),
             claudeNeedsKey: !!env.CLAUDE_ACCESS_KEY,
             claudeModel: env.CLAUDE_MODEL || DEFAULT_CLAUDE_MODEL,
             workersAiModel: WORKERS_AI_MODEL,

@@ -15,6 +15,10 @@ Worker (`latin-suno`) with static assets.
   cache stays small). Do not hand-edit; regenerate with `npm run build:lexicon`.
 - `src/worker.js`: `/api/lookup`, `/api/convert`, `/api/translate`, `/api/health`; everything
   else is served from `public/`.
+- `shared/prompts.js`: the translation prompts, schemas and reply parsing, imported by both
+  the Worker and the bridge so the two paths cannot drift apart.
+- `bridge/`: the VM translation bridge (systemd service `claude-bridge`, port 8790).
+  `lockdown.js` is the single source of the CLI tool lockdown; `README.md` holds the canary.
 - `data/dcc-core-vocabulary.json`: lemma frequency ranks used to order ambiguous readings.
 - `test/engine.test.js`: golden Suno outputs from the user's own Suno tests, phonology unit
   tests, and an accuracy gate against Wiktionary's Classical IPA (`test/fixtures`).
@@ -43,5 +47,10 @@ the Worker, not in the repo.
 - Suno spelling rules are heuristics; label them as such in docs and UI.
 - Typed macrons are trusted; translator output is checked in `mode: "verify"`.
 - Breves are an input-only marker for "deliberately short"; no output may contain one.
-- Translator: Claude through AI Gateway Unified Billing first, Workers AI glm-5.3 as
-  fallback. Never use a Claude subscription/OAuth token from Worker code.
+- Translator order: VM bridge, then Claude through AI Gateway Unified Billing, then Workers
+  AI glm-5.3. The first two are gated on CLAUDE_ACCESS_KEY and that gate must stay: routing
+  other people's requests through a personal Claude subscription is not permitted, while
+  Relo running the unmodified binary on his own plan is. Never put a subscription or OAuth
+  token in Worker code; the bridge spawns the real CLI on the VM instead.
+- The bridge spawns an agent on text from the internet, so any change to bridge/lockdown.js
+  or the prompts must be followed by the canary in bridge/README.md.
