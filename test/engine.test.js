@@ -131,6 +131,15 @@ test("Suno hybrid consonant fixes", () => {
   assert.equal(h("pater"), "pahter");
 });
 
+// Suno sang a written w in every form of unguunt ("ungwant"); there was none before u.
+test("no w sound between q/gu and a following u", () => {
+  const r = convert("equus unguunt equos lingua");
+  assert.equal(r.ipa, "ˈɛ.kʊs ˈʊŋ.ɡʊnt ˈɛ.kʷɔs ˈlɪŋ.ɡʷa");
+  assert.equal(r.hybrid, "ehkūs ūngūnt ehquos lingua");
+  assert.equal(r.lyric, "ehkoos oongoont ehkwos lingwah");
+  assert.equal(r.respell, "EH-koos OON-goont EH-kwos LIN-gwah");
+});
+
 test("section tags and bracketed spans pass through", () => {
   const r = run("[Verse 1]\nHīc ego sum [whispered]\n\n[Chorus]");
   assert.equal(r.lyric, "[Verse 1]\nHeek ehgo soom [whispered]\n\n[Chorus]");

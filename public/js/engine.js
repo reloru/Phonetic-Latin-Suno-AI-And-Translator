@@ -162,6 +162,12 @@ function segment(L, form) {
     const n = units[i + 1];
     if (u.k !== "C") continue;
     if (u.c === "b" && n && (n.c === "s" || n.c === "t")) u.c = "p"; // urbs [urps], obtineō [optineō]
+    // No separate labial before u: equus = ecus [ɛkʊs], unguunt = ungunt [ʊŋɡʊnt].
+    // Suno also sang a written w there ("ungwant"), in every output form.
+    if ((u.c === "kw" || u.c === "gw") && n && n.k === "V" && n.v === "u" && !n.diph) {
+      u.c = u.c === "kw" ? "k" : "g";
+      u.delabialized = true;
+    }
     if ((u.c === "n" || u.c === "m") && n && VELARS.has(n.c)) u.c = "ŋ";
     if (u.c === "m" && n && (n.c === "t" || n.c === "d")) u.c = "n";
     if (u.c === "g" && n && n.c === "n") u.c = "ŋg"; // magnus [maŋnus] (Allen)
@@ -349,10 +355,6 @@ function ipaWord(a, opts) {
       const exilis = (n && ((n.k === "V" && (n.v === "i" || n.v === "y") && !n.diph) || n.c === "l")) || (p && p.c === "l");
       return exilis ? "l" : "ɫ";
     }
-    if (u.c === "kw" || u.c === "gw") {
-      const n = nextOf(u);
-      if (n && n.k === "V" && n.v === "u" && !n.diph) return u.c === "kw" ? "k" : "ɡ";
-    }
     return IPA_C[u.c] ?? u.c;
   };
   const last = syl[syl.length - 1];
@@ -426,6 +428,8 @@ function hybridWord(a, opts) {
       case "i": case "j": out += u.gem === 1 ? "i" : "y"; break;
       case "x": out += u.xPart === 1 ? "x" : ""; break;
       case "z": out += u.gem === 2 ? "" : "z"; break;
+      case "qu": out += u.delabialized ? "k" : "qu"; break;
+      case "gu": out += u.delabialized ? "g" : "gu"; break;
       default: out += u.src;
     }
   });
