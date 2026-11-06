@@ -64,6 +64,12 @@ Anthropic's policy permits an end user to run the unmodified binary on their own
 not to route other people's requests through it, so that gate is load-bearing — see
 `bridge/README.md`.
 
+## Home-screen app
+
+The site is an installable web app (`public/manifest.webmanifest`, icons in `public/icons/`,
+regenerated with `node scripts/make-icons.cjs`). On iPhone: Safari → Share → Add to Home
+Screen. It opens full screen with no Safari bars; it does not work offline.
+
 ## API
 
 - `GET /api/convert?text=Hīc+ego+sum` returns all outputs plus per-word analysis as JSON.
