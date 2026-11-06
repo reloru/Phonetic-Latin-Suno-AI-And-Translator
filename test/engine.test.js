@@ -17,7 +17,7 @@ const run = (text, opts = {}) => convert(text, { lexicon: lexiconFor(text), ...o
 // The user's own Suno-tested spellings are the golden outputs.
 test("golden: Hīc ego sum", () => {
   const r = run("Hīc ego sum");
-  assert.equal(r.hybrid, "Hīck ehgo sūm");
+  assert.equal(r.hybrid, "Hīk ehgo sūm"); // Suno V5+: "Hīck" was sung "heeks"
   assert.equal(r.lyric, "Heek ehgo soom");
 });
 
@@ -30,7 +30,7 @@ test("golden: Iterum atque nōn iterum", () => {
 
 test("golden: Illīc sum, etiam hīc sum", () => {
   const r = run("Illīc sum, etiam hīc sum");
-  assert.equal(r.hybrid, "Illīck sūm, etiam hīck sūm");
+  assert.equal(r.hybrid, "Illīk sūm, etiam hīk sūm");
 });
 
 test("unmarked input is macronized from the dictionary", () => {
@@ -126,6 +126,8 @@ test("Suno hybrid consonant fixes", () => {
   assert.equal(h("Iūlius"), "Yūliūs");
   assert.equal(h("Caesar"), "Kaisar");
   assert.equal(h("ecce"), "ekke");
+  assert.equal(h("recurrō"), "rekūrrō"); // Suno read "rec-" as the English prefix "ree-"
+  assert.equal(h("canō"), "kahnō");
   assert.equal(h("pater"), "pahter");
 });
 
