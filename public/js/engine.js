@@ -397,11 +397,6 @@ function hybridWord(a, opts) {
   flat.forEach((u, i) => {
     if (drop.has(u)) return;
     const next = flat[i + 1];
-    const nextDiff = (() => {
-      let j = i + 1;
-      while (flat[j] && flat[j].k === "C" && flat[j].src === u.src) j++;
-      return flat[j];
-    })();
     if (u.k === "V") {
       const s = syl.find((x) => x.nucleus === u);
       if (u.diph) out += u.diph === "ae" ? "ai" : u.diph === "oe" ? "oi" : u.diph;
@@ -412,14 +407,11 @@ function hybridWord(a, opts) {
       return;
     }
     switch (u.src) {
-      case "c": {
-        const geminateFirst = next && next.k === "C" && next.src === "c";
-        if (geminateFirst) out += isFront(nextDiff) ? "k" : "c";
-        else if (isFront(next)) out += "k";
-        else if (!next) out += "ck";
-        else out += "c";
+      // Always k: Suno V5+ sang final -ck as "-cks" (Hīck → "heeks") and read re-c- as the
+      // English prefix "ree-"; k gave a hard [k] in both places.
+      case "c":
+        out += "k";
         break;
-      }
       case "g": {
         const geminateFirst = next && next.k === "C" && next.src === "g";
         if (!geminateFirst && isFront(next)) out += "gh";

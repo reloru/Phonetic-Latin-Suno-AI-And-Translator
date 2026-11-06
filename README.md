@@ -23,9 +23,11 @@ The phonology follows W. S. Allen, *Vox Latina* (2nd ed., 1978): *c* = [k], *v* 
 *ns*/*nf*, accent by the penultimate law with enclitic and apocope exceptions. No
 Ecclesiastical, Vulgar or Medieval values are used.
 
-The Suno-specific spellings (short *u* written *ū* so *sum* is not sung "suhm", *c* → *k*
-before front vowels, final *c* → *ck*, and so on) are **heuristics drawn from observed Suno
-behaviour**, not from Suno documentation. Expect to tune them as more lines are tested.
+The Suno-specific spellings (short *u* written *ū* so *sum* is not sung "suhm", *c* always
+written *k*, and so on) are **heuristics drawn from observed Suno behaviour**, not from Suno
+documentation. Expect to tune them as more lines are tested. Known history: final *-ck*
+(*Hīck*) worked on an older Suno model but was sung "heeks" on later ones, and *rec-* was
+read as the English prefix "ree-"; plain *k* fixed both.
 
 ### Vowel length
 
