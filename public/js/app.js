@@ -251,8 +251,25 @@ trInput.value = store.get("trInput", "");
 $("#tr-direction").value = store.get("trDirection", "en-la");
 $("#tr-style").value = store.get("trStyle", "lyrical");
 $("#tr-greek").checked = store.get("trGreek", false);
-$("#tr-key").value = store.get("accessKey", "");
-$("#tr-key").addEventListener("change", () => store.set("accessKey", $("#tr-key").value.trim()));
+// A plain text field masked with CSS: a password-type field makes iOS offer saved
+// workers.dev logins every time any field on the page is focused.
+let accessKey = store.get("accessKey", "");
+function showKeyState() {
+  $("#key-saved").hidden = !accessKey;
+  $("#key-entry").hidden = !!accessKey;
+}
+$("#key-save").addEventListener("click", () => {
+  accessKey = $("#tr-access").value.trim();
+  store.set("accessKey", accessKey);
+  $("#tr-access").value = "";
+  showKeyState();
+});
+$("#key-forget").addEventListener("click", () => {
+  accessKey = "";
+  store.set("accessKey", "");
+  showKeyState();
+});
+showKeyState();
 
 $("#tr-go").addEventListener("click", async () => {
   const text = trInput.value.trim();
@@ -270,7 +287,7 @@ $("#tr-go").addEventListener("click", async () => {
   try {
     const res = await fetch("/api/translate", {
       method: "POST",
-      headers: { "content-type": "application/json", ...($("#tr-key").value.trim() ? { "x-access-key": $("#tr-key").value.trim() } : {}) },
+      headers: { "content-type": "application/json", ...(accessKey ? { "x-access-key": accessKey } : {}) },
       body: JSON.stringify({ text, direction, style: $("#tr-style").value, greek: $("#tr-greek").checked }),
     });
     const data = await res.json();

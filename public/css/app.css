@@ -137,3 +137,23 @@ pre.ipa { font-family: "Charis SIL", "Doulos SIL", "Gentium Plus", var(--sans); 
 .guide h2 { margin-top: 22px; }
 .guide p, .guide dd { font-size: 0.95rem; }
 code { font-size: 0.85em; overflow-wrap: anywhere; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
+
+.masked { -webkit-text-security: disc; text-security: disc; }
+#key-saved, #key-entry { display: grid; gap: 8px; }
+#key-saved[hidden], #key-entry[hidden] { display: none; }
+
+/* Home-screen app: the status bar is translucent (black-translucent) with white text, so
+   the strip behind it gets a dark color in light mode and the page colour in dark mode. */
+:root { --status-bg: var(--accent); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --status-bg: var(--bg); } }
+:root[data-theme="dark"] { --status-bg: var(--bg); }
+@media (display-mode: standalone) {
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: env(safe-area-inset-top);
+    background: var(--status-bg);
+    z-index: 10;
+  }
+}
