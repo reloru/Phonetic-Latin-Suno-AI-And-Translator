@@ -82,7 +82,9 @@ function runClaude({ text, direction, style, greek }) {
       if (result.is_error) return reject(new Error(`claude reported an error: ${String(result.result).slice(0, 200)}`));
       const data = parseJsonLoose(result.result);
       if (!data) return reject(new Error("the translation was not valid JSON"));
-      resolve({ data, model: result.model || list.find((e) => e?.model)?.model || "claude", durationMs: result.duration_ms });
+      // A single json result names the model only in modelUsage; verbose event lists name it per event.
+      const model = result.model || Object.keys(result.modelUsage || {})[0] || list.find((e) => e?.model)?.model || "claude";
+      resolve({ data, model, durationMs: result.duration_ms });
     });
 
     child.stdin.on("error", () => {});
