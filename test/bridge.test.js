@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DENY, lockdownSettings, claudeArgs } from "../bridge/lockdown.js";
+import { DENY, lockdownSettings, claudeArgs, childEnv } from "../bridge/lockdown.js";
 import { systemPrompt, wrapInput, parseJsonLoose, cleanTranslation, schemaFor } from "../shared/prompts.js";
 
 // Tools Claude Code 2.1.258 reported as available before the lockdown was applied.
@@ -9,6 +9,7 @@ const OBSERVED_TOOLS = [
   "CronCreate", "CronDelete", "CronList", "DesignSync", "EnterWorktree", "ExitWorktree",
   "ListAgents", "Monitor", "PushNotification", "RemoteTrigger", "ReportFindings",
   "ScheduleWakeup", "SendMessage", "Skill", "ToolSearch", "Workflow",
+  "LSP", // 2.1.311, via a feature flag, when nonessential traffic is allowed
 ];
 
 test("every tool the CLI offered is denied by name", () => {
@@ -23,6 +24,7 @@ test("the settings grant nothing by default", () => {
   assert.equal(s.permissions.defaultMode, "manual");
   assert.equal(s.disableAllHooks, true);
   assert.equal(s.enableAllProjectMcpServers, false);
+  assert.equal(s.model, "opus");
 });
 
 test("the CLI arguments pin it to one tool-less print run", () => {
@@ -32,10 +34,21 @@ test("the CLI arguments pin it to one tool-less print run", () => {
   assert.equal(args[args.indexOf("--mcp-config") + 1], '{"mcpServers":{}}');
   assert.equal(args[args.indexOf("--permission-mode") + 1], "manual");
   assert.equal(args[args.indexOf("--append-system-prompt") + 1], "SYS");
+  assert.equal(args[args.indexOf("--tools") + 1], "", "every built-in tool must be removed");
+  assert.ok(args.includes("--restricted"), "user settings must not reach the spawned CLI");
   // No flag may hand back permissions.
   for (const bad of ["--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "--add-dir", "--allowedTools"]) {
     assert.ok(!args.includes(bad), `${bad} must not be passed`);
   }
+});
+
+test("the child environment carries the token and nothing else of the bridge's", () => {
+  const env = childEnv({ PATH: "/bin", HOME: "/h", USER: "u", CLAUDE_CODE_OAUTH_TOKEN: "t", BRIDGE_SECRET: "s", ANTHROPIC_BASE_URL: "x" });
+  assert.equal(env.CLAUDE_CODE_OAUTH_TOKEN, "t");
+  assert.equal(env.BRIDGE_SECRET, undefined);
+  assert.equal(env.ANTHROPIC_BASE_URL, undefined);
+  assert.equal(env.DISABLE_AUTOUPDATER, "1");
+  assert.ok(!("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC" in env), "nonessential traffic stays enabled");
 });
 
 test("input is wrapped so the model can tell content from instructions", () => {

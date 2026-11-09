@@ -19,7 +19,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { systemPrompt, wrapInput, parseJsonLoose, cleanTranslation } from "../shared/prompts.js";
-import { lockdownSettings, claudeArgs } from "./lockdown.js";
+import { lockdownSettings, claudeArgs, childEnv } from "./lockdown.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.BRIDGE_PORT || 8790);
@@ -52,17 +52,7 @@ let served = 0;
 function runClaude({ text, direction, style, greek }) {
   return new Promise((resolve, reject) => {
     const args = claudeArgs({ settingsPath: SETTINGS, system: systemPrompt({ direction, style, greek }) });
-    // A clean environment: the subscription token, and nothing that would redirect the CLI
-    // to another endpoint or leak this service's own secrets into the agent.
-    const env = {
-      PATH: process.env.PATH,
-      HOME: process.env.HOME,
-      USER: process.env.USER,
-      SHELL: "/bin/false",
-      CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN,
-      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
-    };
-    const child = spawn(CLAUDE_BIN, args, { cwd: WORK_DIR, env, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(CLAUDE_BIN, args, { cwd: WORK_DIR, env: childEnv(), stdio: ["pipe", "pipe", "pipe"] });
 
     let out = "";
     let err = "";
