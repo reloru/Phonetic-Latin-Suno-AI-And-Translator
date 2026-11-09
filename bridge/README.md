@@ -12,8 +12,12 @@ browser ──x-access-key──▶ Worker ──Bearer BRIDGE_SECRET──▶ C
                                         127.0.0.1:8790  bridge/server.js
                                                                │ spawn, stdin
                                                                ▼
-                                                   /usr/bin/claude -p
+                                                    $CLAUDE_BIN -p
 ```
+
+`server.js` spawns `CLAUDE_BIN`, which defaults to `/usr/bin/claude`. The deployed value is
+`/home/ubuntu/.npm-global/bin/claude` (the global npm install of Claude Code), set in
+`/etc/claude-bridge.env`.
 
 ## Why it is gated
 
@@ -49,7 +53,8 @@ inside them is content, never instructions.
 
 ## The canary
 
-Run this after any Claude Code upgrade. It asks the agent to run a shell command and to
+Run this after any Claude Code update, including the automatic ones (see
+[Updates and rollback](#updates-and-rollback)). It asks the agent to run a shell command and to
 report its available tools; both must come back empty-handed.
 
 ```sh
@@ -67,22 +72,26 @@ service (`sudo systemctl stop claude-bridge`) and fix it before restarting.
 To see the tool list the CLI actually exposes:
 
 ```sh
-cd ~/Phonetic-Latin-Suno-AI-And-Translator/bridge && node -e '
+cd ~/Phonetic-Latin-Suno-AI-And-Translator/bridge && CLAUDE_BIN=$(sudo grep -oP '(?<=^CLAUDE_BIN=).*' /etc/claude-bridge.env) node -e '
 import("./lockdown.js").then(async ({claudeArgs})=>{
   const {spawn}=await import("node:child_process");
-  const p=spawn("/usr/bin/claude",[...claudeArgs({settingsPath:"./claude-settings.json",system:"reply ok"}),"--verbose"],{stdio:["pipe","pipe","ignore"]});
+  const p=spawn(process.env.CLAUDE_BIN||"/usr/bin/claude",[...claudeArgs({settingsPath:"./claude-settings.json",system:"reply ok"}),"--verbose"],{stdio:["pipe","pipe","ignore"],env:{...process.env,CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:"1"}});
   let o="";p.stdout.on("data",d=>o+=d);p.stdin.end("hi");
   p.on("close",()=>{const e=JSON.parse(o);const i=(Array.isArray(e)?e:[e]).find(x=>x.subtype==="init");console.log("tools:",i?.tools);});
 })'
 ```
 
-Expected: `tools: []`.
+Expected: `tools: []`. The snippet reads only the `CLAUDE_BIN` line of the env file, so it
+checks the same binary the service spawns, and sets `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`
+as `server.js` does. Without that variable, 2.1.311 was observed (2026-11-09) to also expose
+`LSP`, a tool `DENY` does not name; the bridge itself is unaffected because it always sets
+the variable.
 
 ## Install
 
 ```sh
 sudo cp bridge/claude-bridge.service /etc/systemd/system/
-printf 'BRIDGE_SECRET=%s\nCLAUDE_CODE_OAUTH_TOKEN=%s\n' "$(openssl rand -base64 32 | tr -d /+=)" "$CLAUDE_CODE_OAUTH_TOKEN" | sudo tee /etc/claude-bridge.env >/dev/null
+printf 'BRIDGE_SECRET=%s\nCLAUDE_CODE_OAUTH_TOKEN=%s\nCLAUDE_BIN=/home/ubuntu/.npm-global/bin/claude\n' "$(openssl rand -base64 32 | tr -d /+=)" "$CLAUDE_CODE_OAUTH_TOKEN" | sudo tee /etc/claude-bridge.env >/dev/null
 sudo chmod 600 /etc/claude-bridge.env
 sudo systemctl daemon-reload && sudo systemctl enable --now claude-bridge
 curl -sS localhost:8790/health
@@ -91,8 +100,24 @@ curl -sS localhost:8790/health
 The same `BRIDGE_SECRET` goes to the Worker: `npx wrangler secret put BRIDGE_SECRET`.
 
 `CLAUDE_CODE_OAUTH_TOKEN` is a `claude setup-token` credential, which covers model requests
-only. The service restarts on failure and starts at boot; it does **not** auto-update the
-`claude` binary, because other services on the VM depend on that binary's behaviour.
+only. The service restarts on failure and starts at boot.
+
+## Updates and rollback
+
+The binary in `CLAUDE_BIN` **auto-updates**: it is the global npm install of Claude Code,
+which updates itself on the `stable` channel. A new CLI version can change the bridge's
+behaviour, including which tools exist and which model serves translations, without anyone
+rerunning the canary. Rerun [the canary](#the-canary) and the tool-list check after every
+update; `claude --version` with the deployed path shows which version is live.
+
+To roll back, remove the `CLAUDE_BIN` line and restart; the bridge then falls back to
+`/usr/bin/claude`, an old copy that does not update:
+
+```sh
+sudo sed -i '/^CLAUDE_BIN=/d' /etc/claude-bridge.env && sudo systemctl restart claude-bridge
+```
+
+Rerun the canary afterwards.
 
 ## Operating
 
