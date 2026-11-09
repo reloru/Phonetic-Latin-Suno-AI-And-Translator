@@ -37,11 +37,18 @@ personal subscription, which the policy does not permit.
 ## Containment
 
 The spawned agent must not be able to act on the VM, because its input is text from the
-internet. `bridge/lockdown.js` is the single source of both the `--disallowedTools` flags
-and the generated `claude-settings.json`:
+internet. `bridge/lockdown.js` is the single source of the CLI flags, the generated
+`claude-settings.json` and the child's environment:
 
-- every tool is denied **by name**, and the permission mode is `manual` with an empty allow
-  list, so a tool added by a future Claude Code version has no standing approval either;
+- `--tools ""` removes every built-in tool, so a tool a new version or a remote feature flag
+  adds is not offered at all;
+- every tool is also denied **by name**, and the permission mode is `manual` with an empty
+  allow list, so even an unnamed tool has no standing approval;
+- `--restricted` ignores the user's own `~/.claude` settings (bypass mode, Remote Control,
+  env, model), so only `claude-settings.json` applies; that file names the model (`opus`);
+- the child gets only `PATH`, `HOME`, `USER`, `CLAUDE_CODE_OAUTH_TOKEN` and
+  `DISABLE_AUTOUPDATER=1`. Nonessential traffic (feature flags, telemetry) is left on;
+  only self-updating is off, so a translation never rewrites the shared binary;
 - MCP servers and hooks are disabled (`--strict-mcp-config`, `disableAllHooks`);
 - the CLI is spawned without a shell, with the text written to **stdin**, never argv;
 - it runs in an empty working directory (`bridge/work/`), one request at a time, with a
@@ -72,20 +79,19 @@ service (`sudo systemctl stop claude-bridge`) and fix it before restarting.
 To see the tool list the CLI actually exposes:
 
 ```sh
-cd ~/Phonetic-Latin-Suno-AI-And-Translator/bridge && CLAUDE_BIN=$(sudo grep -oP '(?<=^CLAUDE_BIN=).*' /etc/claude-bridge.env) node -e '
-import("./lockdown.js").then(async ({claudeArgs})=>{
+cd ~/Phonetic-Latin-Suno-AI-And-Translator/bridge && CLAUDE_BIN=$(sudo grep -oP '(?<=^CLAUDE_BIN=).*' /etc/claude-bridge.env) CLAUDE_CODE_OAUTH_TOKEN=$(sudo grep -oP '(?<=^CLAUDE_CODE_OAUTH_TOKEN=).*' /etc/claude-bridge.env) node -e '
+import("./lockdown.js").then(async ({claudeArgs,childEnv})=>{
   const {spawn}=await import("node:child_process");
-  const p=spawn(process.env.CLAUDE_BIN||"/usr/bin/claude",[...claudeArgs({settingsPath:"./claude-settings.json",system:"reply ok"}),"--verbose"],{stdio:["pipe","pipe","ignore"],env:{...process.env,CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:"1"}});
+  const p=spawn(process.env.CLAUDE_BIN||"/usr/bin/claude",[...claudeArgs({settingsPath:process.cwd()+"/claude-settings.json",system:"reply ok"}),"--verbose"],{cwd:"./work",env:childEnv(),stdio:["pipe","pipe","ignore"]});
   let o="";p.stdout.on("data",d=>o+=d);p.stdin.end("hi");
   p.on("close",()=>{const e=JSON.parse(o);const i=(Array.isArray(e)?e:[e]).find(x=>x.subtype==="init");console.log("tools:",i?.tools);});
 })'
 ```
 
-Expected: `tools: []`. The snippet reads only the `CLAUDE_BIN` line of the env file, so it
-checks the same binary the service spawns, and sets `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`
-as `server.js` does. Without that variable, 2.1.311 was observed (2026-11-09) to also expose
-`LSP`, a tool `DENY` does not name; the bridge itself is unaffected because it always sets
-the variable.
+Expected: `tools: []`. The snippet reads only the `CLAUDE_BIN` and token lines of the env
+file and spawns with the service's own args, environment (`childEnv`) and working
+directory, so it checks exactly what the service runs. Run it from a plain shell: the
+service's settings file only exists once the service has started.
 
 ## Install
 
@@ -107,8 +113,12 @@ only. The service restarts on failure and starts at boot.
 The binary in `CLAUDE_BIN` **auto-updates**: it is the global npm install of Claude Code,
 which updates itself on the `stable` channel. A new CLI version can change the bridge's
 behaviour, including which tools exist and which model serves translations, without anyone
-rerunning the canary. Rerun [the canary](#the-canary) and the tool-list check after every
-update; `claude --version` with the deployed path shows which version is live.
+rerunning the canary. Tool exposure can also change **without** a CLI update, through
+remotely fetched feature flags (2.1.311 began offering `LSP` that way on 2026-11-09, which
+is why `--tools ""` exists). Rerun [the canary](#the-canary) and the tool-list check after
+every update and periodically; `claude --version` with the deployed path shows which
+version is live. The VM's interactive settings pin `minimumVersion` so the `stable` channel
+does not pull the copy back below the version that was last canaried.
 
 To roll back, remove the `CLAUDE_BIN` line and restart; the bridge then falls back to
 `/usr/bin/claude`, an old copy that does not update:
